@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.tox/
+.nox/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# spaCy models (large files - install separately)
+wheels/
+
+# Downloaded/trained models (large binary files)
+models/fine_tuned/
+!models/.gitkeep
+
+# Logs
+logs/*.log
+logs/*.log.*
+!logs/.gitkeep
+
+# Label Studio data
+data/
+
+# Environment secrets
+# Keep the template files but not local overrides
+config/*.local.env
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# pytest
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Distribution
+*.tar.gz
+*.zip

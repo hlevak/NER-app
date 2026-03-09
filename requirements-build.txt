@@ -1,0 +1,9 @@
+# Requirements for building offline wheel packages
+# Run on a machine with internet access to download all wheels for offline installation
+
+pip==24.0
+wheel==0.43.0
+setuptools==70.0.0
+
+# Download tool
+pip-download==0.3.4
