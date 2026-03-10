@@ -70,3 +70,7 @@ def get_training_logger() -> logging.Logger:
 
 def get_app_logger() -> logging.Logger:
     return _configure_logger("ner.app", "app.log", error_filename="app_errors.log")
+
+
+def get_llm_logger() -> logging.Logger:
+    return _configure_logger("ner.llm", "llm.log", error_filename="llm_errors.log")
