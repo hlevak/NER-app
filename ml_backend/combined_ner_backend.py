@@ -5,6 +5,7 @@ from label_studio_ml.model import LabelStudioMLBase
 
 from .spacy_ner_model import SpacyNERModel
 from .webapi_client import WebAPIClient
+from .llm_client import LLMClient
 from .logger import get_predict_logger, get_fit_logger, get_app_logger
 
 predict_logger = get_predict_logger()
@@ -14,28 +15,48 @@ app_logger = get_app_logger()
 LABEL_STUDIO_LABEL_TYPE = "labels"
 
 
-def _merge_entities(
-    spacy_entities: list[dict[str, Any]],
-    webapi_entities: list[dict[str, Any]],
+def _merge_two_entities(
+    primary: list[dict[str, Any]],
+    secondary: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Merge spaCy and WebAPI entities, preferring WebAPI results on overlap."""
-    if not webapi_entities:
-        return spacy_entities
+    """Merge two entity lists, preferring primary results on overlap."""
+    if not primary:
+        return secondary
+    if not secondary:
+        return primary
 
-    merged = list(webapi_entities)
-    webapi_spans = {(e["start"], e["end"]) for e in webapi_entities}
+    merged = list(primary)
+    primary_spans = {(e["start"], e["end"]) for e in primary}
 
-    for ent in spacy_entities:
+    for ent in secondary:
         span = (ent["start"], ent["end"])
-        if span not in webapi_spans:
+        if span not in primary_spans:
             overlaps = any(
-                not (ent["end"] <= w["start"] or ent["start"] >= w["end"])
-                for w in webapi_entities
+                not (ent["end"] <= p["start"] or ent["start"] >= p["end"])
+                for p in primary
             )
             if not overlaps:
                 merged.append(ent)
 
     return sorted(merged, key=lambda e: e["start"])
+
+
+def _merge_entities(
+    spacy_entities: list[dict[str, Any]],
+    webapi_entities: list[dict[str, Any]],
+    llm_entities: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Merge entities from multiple sources.
+    Priority: LLM > WebAPI > spaCy
+    """
+    if llm_entities is None:
+        llm_entities = []
+
+    merged = _merge_two_entities(webapi_entities, spacy_entities)
+    merged = _merge_two_entities(llm_entities, merged)
+
+    return merged
 
 
 def _entities_to_label_studio_result(
@@ -67,8 +88,11 @@ class CombinedNERBackend(LabelStudioMLBase):
         app_logger.info("Initializing CombinedNERBackend")
         self.spacy_model = SpacyNERModel()
         self.webapi_client = WebAPIClient()
+        self.llm_client = LLMClient()
         app_logger.info(
-            "Backend initialized. WebAPI configured: %s", self.webapi_client.is_configured()
+            "Backend initialized. WebAPI configured: %s, LLM configured: %s",
+            self.webapi_client.is_configured(),
+            self.llm_client.is_configured(),
         )
 
     def predict(self, tasks: list[dict[str, Any]], **kwargs: Any) -> list[dict[str, Any]]:
@@ -93,9 +117,17 @@ class CombinedNERBackend(LabelStudioMLBase):
                     webapi_entities = self.webapi_client.search_entities(text)
                     predict_logger.debug("WebAPI found %d entities", len(webapi_entities))
                 except Exception as exc:
-                    predict_logger.error("WebAPI call failed, using spaCy only: %s", exc)
+                    predict_logger.error("WebAPI call failed: %s", exc)
 
-            merged = _merge_entities(spacy_entities, webapi_entities)
+            llm_entities = []
+            if self.llm_client.is_configured():
+                try:
+                    llm_entities = self.llm_client.predict_entities_sync(text)
+                    predict_logger.debug("LLM found %d entities", len(llm_entities))
+                except Exception as exc:
+                    predict_logger.error("LLM call failed: %s", exc)
+
+            merged = _merge_entities(spacy_entities, webapi_entities, llm_entities)
             result = _entities_to_label_studio_result(merged, from_name, to_name)
 
             avg_score = (
@@ -124,6 +156,41 @@ class CombinedNERBackend(LabelStudioMLBase):
         elapsed = time.time() - start_time
         fit_logger.info("Fit finished in %.1fs: %s", elapsed, metrics.get("status"))
         return metrics
+
+    def get_suggestions(self, text: str, partial: str = "", context: str = "") -> list[dict[str, Any]]:
+        """
+        Get entity suggestions for autocomplete functionality.
+        Uses LLM if configured, falls back to spaCy predictions.
+        """
+        predict_logger.info("Getting suggestions for partial text: %s", partial[:50])
+
+        if self.llm_client.is_configured():
+            try:
+                suggestions = self.llm_client.get_suggestions(partial, context)
+                if suggestions:
+                    return suggestions
+            except Exception as exc:
+                predict_logger.error("LLM suggestions failed: %s", exc)
+
+        spacy_entities = self.spacy_model.predict([text])[0]
+        suggestions = [
+            {"text": ent["text"], "label": ent["label"], "confidence": ent.get("score", 0.8)}
+            for ent in spacy_entities
+            if partial.lower() in ent["text"].lower()
+        ]
+        return suggestions
+
+    def normalize_entity(self, text: str, label: str) -> dict[str, Any]:
+        """
+        Normalize/verify an entity using LLM if available.
+        """
+        if self.llm_client.is_configured():
+            try:
+                return self.llm_client.normalize_entity_sync(text, label)
+            except Exception as exc:
+                predict_logger.error("LLM normalization failed: %s", exc)
+
+        return {"text": text, "label": label, "normalized_text": text, "confidence": 1.0}
 
     def _get_label_config_params(self) -> tuple[str, str, str]:
         try:
