@@ -202,17 +202,35 @@ LLM результаты:      [PER(0,5),                                MONEY(5
 
 ### Предварительные требования
 
-1. ✅ PostgreSQL 15+ установлен
-2. ✅ Python 3.10 или 3.11 установлен
-3. ✅ Создана база данных `label_studio`
+1. ✅ Python 3.10 или 3.11 установлен
+2. ✅ PostgreSQL 15+ установлен (опционально для разработки - можно использовать SQLite)
+3. ✅ Создана база данных `label_studio` (для PostgreSQL)
 
-### Запуск
+### Запуск (без Docker)
 
+#### Linux/macOS:
+```bash
+cd /path/to/NER-app
+
+# Первоначальная настройка (один раз)
+./scripts/setup.sh
+./scripts/setup_database.sh  # для PostgreSQL
+
+# Запустить все сервисы
+./scripts/start_all.sh
+
+# Или отдельно:
+# ./scripts/start_ml_backend.sh
+# ./scripts/start_label_studio.sh
+```
+
+#### Windows:
 ```bat
 cd C:\NER-app
 
-:: Активировать виртуальное окружение
-venv\Scripts\activate
+:: Первоначальная настройка (один раз)
+scripts\setup.bat
+scripts\setup_database.bat
 
 :: Запустить все сервисы
 scripts\start_all.bat
@@ -246,6 +264,7 @@ scripts\start_all.bat
 5. Подключите ML Backend: **Settings → Machine Learning → Add Model**
    - URL: `http://localhost:9090`
    - Название: `spaCy NER Backend`
+   - Включите **Use for interactive pre-annotation** для интерактивного режима
 
 ---
 
@@ -253,8 +272,16 @@ scripts\start_all.bat
 
 ### Вариант A: Online установка (с интернетом)
 
-#### 1. Установка PostgreSQL
+#### 1. Установка PostgreSQL (опционально для разработки)
 
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt update
+sudo apt install postgresql postgresql-contrib
+sudo service postgresql start
+```
+
+**Windows:**
 ```bat
 :: Скачайте с https://www.postgresql.org/download/windows/
 :: Запустите установщик, запомните пароль пользователя postgres
@@ -262,19 +289,48 @@ scripts\start_all.bat
 
 #### 2. Инициализация базы данных
 
+**Linux/macOS:**
+```bash
+cd /path/to/NER-app
+./scripts/setup_database.sh
+```
+
+**Windows:**
 ```bat
 cd C:\NER-app
 scripts\setup_database.bat
 ```
 
 > При запросе введите пароль пользователя `postgres`
+> Для разработки можно пропустить этот шаг и использовать SQLite.
 
 #### 3. Создание виртуального окружения
 
+**Linux/macOS:**
+```bash
+cd /path/to/NER-app
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+**Windows:**
 ```bat
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+Или используйте скрипт установки:
+
+**Linux/macOS:**
+```bash
+./scripts/setup.sh
+```
+
+**Windows:**
+```bat
+scripts\setup.bat
 ```
 
 #### 4. Настройка конфигурации
@@ -283,24 +339,34 @@ pip install -r requirements.txt
 
 **`config/label-studio.env`**
 ```env
+# Для PostgreSQL:
 POSTGRE_HOST=localhost
 POSTGRE_PORT=5432
 POSTGRE_PASSWORD=LabelStudio2024!
 LABEL_STUDIO_HOST=http://localhost:8080
+
+# Для SQLite (разработка):
+# POSTGRE_HOST=
 ```
 
 **`config/ml-backend.env`**
 ```env
 SPACY_MODEL=ru_core_news_sm
-MODELS_DIR=C:\NER-app\models
-LOGS_DIR=C:\NER-app\logs
+MODELS_DIR=/path/to/NER-app/models
+LOGS_DIR=/path/to/NER-app/logs
 ML_BACKEND_PORT=9090
 ```
 
-> ⚠️ **Обязательно смените пароли!**
+> ⚠️ **Обязательно смените пароли в production!**
 
 #### 5. Запуск сервисов
 
+**Linux/macOS:**
+```bash
+./scripts/start_all.sh
+```
+
+**Windows:**
 ```bat
 scripts\start_all.bat
 ```
@@ -407,6 +473,77 @@ SPACY_MODEL=ru_core_news_lg  # Точная
 
 ---
 
+## 🎯 Confidence и Reasoning
+
+ML Backend поддерживает вывод уверенности (confidence score) и объяснений (reasoning) для каждой распознанной сущности.
+
+### Формат ответа
+
+```json
+{
+  "result": [
+    {
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "value": {
+        "start": 0,
+        "end": 11,
+        "text": "Иван Петров",
+        "labels": ["PER"]
+      },
+      "score": 0.95,
+      "meta": {
+        "source": "spacy",
+        "reasoning": "Имя человека: 'Иван Петров' - распознано как персоналия"
+      }
+    }
+  ]
+}
+```
+
+### Уровни уверенности (Confidence)
+
+| Источник | Диапазон | Описание |
+|----------|----------|----------|
+| **spaCy** | 0.85 - 0.99 | Базовая уверенность на основе характеристик сущности |
+| **WebAPI** | Зависит от API | Уверенность, предоставленная внешним API |
+| **LLM** | 0.0 - 1.0 | Уверенность, оцененная LLM моделью |
+
+### Объяснения (Reasoning)
+
+Каждая сущность сопровождается текстовым объяснением:
+- **spaCy**: Описание типа сущности на основе правил
+- **WebAPI**: Источник данных из внешнего API
+- **LLM**: Краткое объяснение от языковой модели
+
+### Режимы работы
+
+#### Pre-annotation (Предварительная разметка)
+
+Автоматическая разметка задач при их создании:
+1. Создайте проект в Label Studio
+2. Подключите ML Backend в Settings → Machine Learning
+3. Включите **Use for interactive pre-annotation**
+4. Загрузите задачи - они будут автоматически размечены
+
+#### Interactive Mode (Интерактивный режим)
+
+Реальные предсказания во время редактирования:
+1. Подключите ML Backend
+2. Включите **Use for interactive pre-annotation**
+3. При открытии задачи ML Backend предоставляет предсказания
+4. При редактировании текста можно запросить новые предсказания
+
+#### Training (Обучение)
+
+Дообучение модели на размеченных данных:
+1. В настройках ML Backend включите **Auto-update model**
+2. Label Studio будет автоматически вызывать `/fit` при накоплении аннотаций
+3. Или запустите обучение вручную через API
+
+---
+
 ## 📈 Дообучение модели
 
 ### Экспорт данных из Label Studio
@@ -509,34 +646,41 @@ NER-app/
 │
 ├── config/                      # Конфигурационные файлы
 │   ├── label-studio.env         # Настройки Label Studio + PostgreSQL
-│   ├── ml-backend.env           # Настройки ML Backend + WebAPI
+│   ├── ml-backend.env           # Настройки ML Backend + WebAPI + LLM
 │   └── postgresql-init.sql      # SQL инициализация БД
 │
-├── ml_backend/                  # ML Backend исходный код
+├── ml_backend/                  # ML Backend исходный код (Flask)
 │   ├── __init__.py
 │   ├── wsgi.py                  # Точка входа Flask приложения
 │   ├── combined_ner_backend.py  # LabelStudioMLBase наследник
-│   ├── spacy_ner_model.py       # spaCy NER обёртка
+│   ├── spacy_ner_model.py       # spaCy NER обёртка с confidence/reasoning
 │   ├── model_trainer.py         # Логика обучения
 │   ├── webapi_client.py        # HTTP клиент WebAPI
+│   ├── llm_client.py           # LLM клиент (LM Studio / llama.cpp)
 │   ├── base_model.py           # Абстрактный базовый класс
-│   ├── logger.py               # Настройка логирования
-│   └── requirements.txt        # Зависимости ML Backend
+│   └── logger.py               # Настройка логирования
 │
-├── scripts/                     # Скрипты запуска (Windows batch)
-│   ├── start_all.bat           # Запуск всех сервисов
-│   ├── start_ml_backend.bat   # Запуск ML Backend
-│   ├── start_label_studio.bat # Запуск Label Studio
-│   ├── setup_database.bat     # Настройка PostgreSQL
-│   ├── install_offline.bat    # Offline установка
-│   ├── download_wheels.py     # Скачивание wheels
-│   └── download_wheels.bat    # Скачивание wheels (batch)
+├── scripts/                     # Скрипты запуска
+│   ├── setup.sh                # Настройка окружения (Linux/macOS)
+│   ├── setup.bat               # Настройка окружения (Windows)
+│   ├── setup_database.sh       # Настройка PostgreSQL (Linux/macOS)
+│   ├── setup_database.bat      # Настройка PostgreSQL (Windows)
+│   ├── start_all.sh            # Запуск всех сервисов (Linux/macOS)
+│   ├── start_all.bat           # Запуск всех сервисов (Windows)
+│   ├── start_ml_backend.sh     # Запуск ML Backend (Linux/macOS)
+│   ├── start_ml_backend.bat    # Запуск ML Backend (Windows)
+│   ├── start_label_studio.sh   # Запуск Label Studio (Linux/macOS)
+│   ├── start_label_studio.bat  # Запуск Label Studio (Windows)
+│   ├── install_offline.bat     # Offline установка (Windows)
+│   ├── download_wheels.py      # Скачивание wheels
+│   └── download_wheels.bat     # Скачивание wheels (batch)
 │
 ├── docs/                       # Документация
 │   ├── ARCHITECTURE.md         # Архитектура системы
 │   ├── INSTALLATION.md         # Инструкция по установке
 │   ├── OFFLINE_SETUP.md        # Offline установка
 │   ├── ML_BACKEND.md           # Описание ML Backend API
+│   ├── LLM_INTEGRATION.md      # Интеграция с LLM
 │   ├── MODEL_TRAINING.md       # Дообучение модели
 │   └── TROUBLESHOOTING.md      # Устранение проблем
 │
@@ -552,9 +696,51 @@ NER-app/
 │   ├── fit.log                 # Fit операции
 │   ├── webapi.log              # WebAPI вызовы
 │   ├── webapi_errors.log       # Ошибки WebAPI
-│   └── training.log             # Процесс обучения
+│   ├── llm.log                 # LLM вызовы
+│   ├── llm_errors.log          # Ошибки LLM
+│   └── training.log            # Процесс обучения
 │
 └── wheels/                     # Wheel-пакеты для offline установки
+```
+
+## 🏗️ Архитектура без Docker
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                            Linux / Windows / macOS                      │
+│                                                                         │
+│   ┌────────────────┐              HTTP/REST              ┌───────────┐  │
+│   │ Label Studio   │◄───────────────────────────────────►│ ML Backend│  │
+│   │   :8080        │        (Flask + label-studio-ml)    │  :9090    │  │
+│   │                │                                   │            │  │
+│   │ • Разметка     │                                   │ ┌───────┐  │  │
+│   │ • Pre-ann      │                                   │ │spaCy  │  │  │
+│   │ • Interactive  │                                   │ │ + NER │  │  │
+│   └───────┬────────┘                                   │ └───┬───┘  │  │
+│           │                                             │     │     │  │
+│           │ SQLAlchemy                                  │ ┌───▼───┐  │  │
+│   ┌───────▼────────┐                                   │ │WebAPI │  │  │
+│   │   PostgreSQL   │                                   │ │Client │  │  │
+│   │    :5432       │                                   │ └───────┘  │  │
+│   │   (опционально)│                                   │            │  │
+│   │                │                                   │ ┌───────┐  │  │
+│   │ label_studio   │                                   │ │ LLM   │  │  │
+│   │   database     │                                   │ │Client │  │  │
+│   └────────────────┘                                   │ └───┬───┘  │  │
+│                                                         └─────┼──────┘  │
+│                                                               │         │
+│                                                     (опционально)       │
+│                                                               │         │
+│                                                   ┌───────────▼────┐    │
+│                                                   │  LM Studio /   │    │
+│                                                   │  llama.cpp     │    │
+│                                                   │  :1234         │    │
+│                                                   └────────────────┘    │
+│   ┌──────────────────────────────────────────────────────────────┐    │
+│   │                    Файловая система                          │    │
+│   │   models/fine_tuned/   logs/   data/   config/               │    │
+│   └──────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---

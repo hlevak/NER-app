@@ -37,10 +37,24 @@ NER_SYSTEM_PROMPT = """Ты - эксперт в распознавании им�
 - DATE (Date) - даты
 - MONEY (Money) - денежные суммы
 
+Для каждой сущности укажи:
+- start, end: позиции в тексте
+- label: тип сущности
+- text: текст сущности
+- score: уверенность от 0.0 до 1.0
+- reasoning: краткое объяснение почему это сущность данного типа
+
 Ответь строго в формате JSON:
 {
   "entities": [
-    {"start": 0, "end": 5, "label": "PER", "text": "Иван"}
+    {
+      "start": 0,
+      "end": 5,
+      "label": "PER",
+      "text": "Иван",
+      "score": 0.95,
+      "reasoning": "Имя человека, написанное с заглавной буквы"
+    }
   ]
 }
 
@@ -192,6 +206,8 @@ class LLMClient:
             for ent in entities:
                 ent["source"] = "llm"
                 ent["score"] = ent.get("score", 0.9)
+                if "reasoning" not in ent:
+                    ent["reasoning"] = "Определено LLM моделью"
 
             elapsed = time.time() - start_time
             logger.info("LLM NER completed in %.3fs, found %d entities", elapsed, len(entities))

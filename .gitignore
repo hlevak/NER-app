@@ -63,3 +63,6 @@ coverage.xml
 # Distribution
 *.tar.gz
 *.zip
+
+# Keep shell scripts tracked
+!scripts/*.sh

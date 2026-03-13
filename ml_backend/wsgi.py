@@ -75,6 +75,50 @@ def create_app():
         except Exception as exc:
             return jsonify({"status": "error", "error": str(exc)}), 500
 
+    @app.route("/interactive", methods=["POST"])
+    def interactive():
+        """Interactive mode for real-time predictions during annotation.
+        
+        Label Studio calls this endpoint when user is actively editing
+        to provide immediate feedback and suggestions.
+        """
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        try:
+            model = app.model
+            result = model.interactive_annotate(data)
+            return jsonify(result)
+        except Exception as exc:
+            logger.error("Interactive endpoint error: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/setup", methods=["POST"])
+    def setup():
+        """Setup endpoint called by Label Studio when connecting ML Backend.
+        
+        Returns configuration info for the ML Backend.
+        """
+        try:
+            model = app.model
+            return jsonify({
+                "status": "ok",
+                "model_class": "CombinedNERBackend",
+                "supported_modes": ["pre-annotation", "interactive", "training"],
+                "capabilities": {
+                    "predict": True,
+                    "fit": True,
+                    "interactive": True,
+                    "suggestions": True,
+                },
+                "webapi_configured": model.webapi_client.is_configured(),
+                "llm_configured": model.llm_client.is_configured(),
+            })
+        except Exception as exc:
+            logger.error("Setup endpoint error: %s", exc)
+            return jsonify({"status": "error", "error": str(exc)}), 500
+
     logger.info("ML Backend application created successfully")
     return app
 

@@ -67,7 +67,7 @@ def _entities_to_label_studio_result(
     results = []
     for ent in entities:
         text_len = ent["end"] - ent["start"]
-        results.append({
+        result_item = {
             "from_name": from_name,
             "to_name": to_name,
             "type": LABEL_STUDIO_LABEL_TYPE,
@@ -78,7 +78,19 @@ def _entities_to_label_studio_result(
                 "labels": [ent["label"]],
             },
             "score": ent.get("score", 1.0),
-        })
+        }
+        
+        # Add metadata for confidence and reasoning
+        metadata = {}
+        if "reasoning" in ent:
+            metadata["reasoning"] = ent["reasoning"]
+        if "source" in ent:
+            metadata["source"] = ent["source"]
+        
+        if metadata:
+            result_item["meta"] = metadata
+            
+        results.append(result_item)
     return results
 
 
@@ -191,6 +203,68 @@ class CombinedNERBackend(LabelStudioMLBase):
                 predict_logger.error("LLM normalization failed: %s", exc)
 
         return {"text": text, "label": label, "normalized_text": text, "confidence": 1.0}
+
+    def interactive_annotate(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Interactive annotation mode for real-time predictions during editing.
+        Called by Label Studio when user is actively annotating.
+        
+        Args:
+            data: Dictionary containing task data with 'text' and optional context
+            
+        Returns:
+            Dictionary with predictions and suggestions
+        """
+        predict_logger.info("Interactive annotate called")
+        start_time = time.time()
+
+        text = data.get("text", "")
+        context = data.get("context", "")
+        
+        if not text:
+            return {"result": [], "suggestions": []}
+
+        from_name, to_name, value_key = self._get_label_config_params()
+
+        # Get entities from all sources
+        spacy_entities = self.spacy_model.predict([text])[0]
+        predict_logger.debug("Interactive: spaCy found %d entities", len(spacy_entities))
+
+        webapi_entities = []
+        if self.webapi_client.is_configured():
+            try:
+                webapi_entities = self.webapi_client.search_entities(text)
+                predict_logger.debug("Interactive: WebAPI found %d entities", len(webapi_entities))
+            except Exception as exc:
+                predict_logger.error("Interactive WebAPI call failed: %s", exc)
+
+        llm_entities = []
+        if self.llm_client.is_configured():
+            try:
+                llm_entities = self.llm_client.predict_entities_sync(text)
+                predict_logger.debug("Interactive: LLM found %d entities", len(llm_entities))
+            except Exception as exc:
+                predict_logger.error("Interactive LLM call failed: %s", exc)
+
+        merged = _merge_entities(spacy_entities, webapi_entities, llm_entities)
+        result = _entities_to_label_studio_result(merged, from_name, to_name)
+
+        # Generate suggestions based on partial text if context provided
+        suggestions = []
+        if context:
+            suggestions = self.get_suggestions(text, context, text)
+
+        elapsed = time.time() - start_time
+        predict_logger.info(
+            "Interactive annotate completed in %.3fs, found %d entities",
+            elapsed, len(merged)
+        )
+
+        return {
+            "result": result,
+            "suggestions": suggestions,
+            "score": sum(e.get("score", 1.0) for e in merged) / len(merged) if merged else 0.0,
+        }
 
     def _get_label_config_params(self) -> tuple[str, str, str]:
         try:
