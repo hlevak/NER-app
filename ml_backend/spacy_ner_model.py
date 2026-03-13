@@ -52,16 +52,23 @@ class SpacyNERModel(BaseNERModel):
 
         for text in texts:
             doc = self.nlp(text)
-            entities = [
-                {
+            entities = []
+            for ent in doc.ents:
+                # Generate reasoning based on entity type
+                reasoning = self._get_reasoning(ent.label_, ent.text)
+                
+                # Calculate confidence based on entity characteristics
+                score = self._calculate_confidence(ent)
+                
+                entities.append({
                     "start": ent.start_char,
                     "end": ent.end_char,
                     "label": ent.label_,
                     "text": ent.text,
-                    "score": 1.0,
-                }
-                for ent in doc.ents
-            ]
+                    "score": score,
+                    "reasoning": reasoning,
+                    "source": "spacy",
+                })
             results.append(entities)
             predict_logger.debug(
                 "Text (len=%d) -> %d entities: %s",
@@ -73,6 +80,36 @@ class SpacyNERModel(BaseNERModel):
         elapsed = time.time() - start_time
         predict_logger.info("Predict completed in %.3fs for %d texts", elapsed, len(texts))
         return results
+
+    def _get_reasoning(self, label: str, text: str) -> str:
+        """Generate human-readable reasoning for entity classification."""
+        reasoning_map = {
+            "PER": f"Имя человека: '{text}' - распознано как персоналия",
+            "ORG": f"Организация: '{text}' - распознано как компания или учреждение",
+            "LOC": f"Локация: '{text}' - географическое название",
+            "GPE": f"Географическое название: '{text}' - страна, город или регион",
+            "DATE": f"Дата: '{text}' - временное выражение",
+            "MONEY": f"Денежная сумма: '{text}' - валютное значение",
+            "MISC": f"Разное: '{text}' - прочая именованная сущность",
+        }
+        return reasoning_map.get(label, f"Сущность типа {label}: '{text}'")
+
+    def _calculate_confidence(self, ent) -> float:
+        """Calculate confidence score based on entity characteristics."""
+        # Base confidence
+        confidence = 0.85
+        
+        # Adjust based on entity length (longer entities with clear boundaries are more confident)
+        text_len = len(ent.text)
+        if text_len >= 3:
+            confidence += 0.05
+        
+        # Adjust based on whether entity starts with uppercase (for certain types)
+        if ent.text[0].isupper() and ent.label_ in ("PER", "ORG", "LOC", "GPE"):
+            confidence += 0.05
+        
+        # Cap at 0.99 (never 1.0 to indicate it's ML-based)
+        return min(confidence, 0.99)
 
     def fit(self, annotations: list[dict[str, Any]]) -> dict[str, Any]:
         fit_logger.info("Fit called with %d annotations", len(annotations))

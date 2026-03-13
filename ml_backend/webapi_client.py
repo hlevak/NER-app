@@ -51,6 +51,15 @@ class WebAPIClient:
                 response.raise_for_status()
                 data = response.json()
                 entities = data.get("entities", [])
+                
+                # Add source and default reasoning if not present
+                for ent in entities:
+                    ent["source"] = "webapi"
+                    if "reasoning" not in ent:
+                        ent["reasoning"] = f"Получено из внешнего API: {ent.get('label', 'UNKNOWN')}"
+                    if "score" not in ent:
+                        ent["score"] = 0.85
+                
                 logger.info("WebAPI returned %d entities for text_len=%d", len(entities), len(text))
                 return entities
             except requests.exceptions.Timeout:
