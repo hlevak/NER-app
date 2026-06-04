@@ -35,31 +35,20 @@ NER_SYSTEM_PROMPT = """Ты - эксперт в распознавании им�
 - ORG (Organization) - организации, компании
 - LOC (Location) - географические локации, города, страны
 - DATE (Date) - даты
-- MONEY (Money) - денежные суммы
-
-Для каждой сущности укажи:
-- start, end: позиции в тексте
-- label: тип сущности
-- text: текст сущности
-- score: уверенность от 0.0 до 1.0
-- reasoning: краткое объяснение почему это сущность данного типа
 
 Ответь строго в формате JSON:
 {
   "entities": [
-    {
-      "start": 0,
-      "end": 5,
-      "label": "PER",
-      "text": "Иван",
-      "score": 0.95,
-      "reasoning": "Имя человека, написанное с заглавной буквы"
-    }
+    {"label": "PER", "text": "Иван Иванов"},
+    {"label": "ORG", "text": "Яндекс"}
   ]
 }
 
+Поле "text" должно содержать точную подстроку из исходного текста.
 Если сущностей нет, верни {"entities": []}.
 """
+
+_ALLOWED_LABELS = {"PER", "ORG", "LOC", "DATE"}
 
 NORMALIZE_SYSTEM_PROMPT = """Ты - эксперт по нормализации именованных сущностей.
 Твоя задача - привести сущность к канонической форме.
@@ -187,6 +176,26 @@ class LLMClient:
             logger.error("Failed to extract JSON from LLM response: %s", exc)
             return {}
 
+    def _fix_offsets(self, source: str, entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Replace LLM-reported offsets with positions found via str.find."""
+        fixed = []
+        search_from = 0
+        for ent in sorted(entities, key=lambda e: e.get("start", 0)):
+            ent_text = ent.get("text", "").strip()
+            if not ent_text:
+                continue
+            pos = source.find(ent_text, search_from)
+            if pos == -1:
+                pos = source.find(ent_text)
+            if pos == -1:
+                logger.warning("Entity text not found in source, dropping: %r", ent_text)
+                continue
+            ent["start"] = pos
+            ent["end"] = pos + len(ent_text)
+            search_from = ent["end"]
+            fixed.append(ent)
+        return fixed
+
     async def predict_entities(self, text: str) -> list[dict[str, Any]]:
         if not self.is_configured():
             logger.debug("LLM not configured, skipping entity prediction")
@@ -202,6 +211,9 @@ class LLMClient:
             content = self._parse_response(response)
             data = self._extract_json(content)
             entities = data.get("entities", [])
+
+            entities = [e for e in entities if e.get("label") in _ALLOWED_LABELS]
+            entities = self._fix_offsets(text, entities)
 
             for ent in entities:
                 ent["source"] = "llm"
