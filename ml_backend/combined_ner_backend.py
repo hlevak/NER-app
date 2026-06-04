@@ -3,6 +3,7 @@ from typing import Any
 
 from label_studio_ml.model import LabelStudioMLBase
 
+from .regex_ner import RegexNERProcessor
 from .spacy_ner_model import SpacyNERModel
 from .webapi_client import WebAPIClient
 from .llm_client import LLMClient
@@ -45,17 +46,15 @@ def _merge_entities(
     spacy_entities: list[dict[str, Any]],
     webapi_entities: list[dict[str, Any]],
     llm_entities: list[dict[str, Any]] | None = None,
+    regex_entities: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Merge entities from multiple sources.
-    Priority: LLM > WebAPI > spaCy
+    Priority: Regex > LLM > WebAPI > spaCy
     """
-    if llm_entities is None:
-        llm_entities = []
-
     merged = _merge_two_entities(webapi_entities, spacy_entities)
-    merged = _merge_two_entities(llm_entities, merged)
-
+    merged = _merge_two_entities(llm_entities or [], merged)
+    merged = _merge_two_entities(regex_entities or [], merged)
     return merged
 
 
@@ -66,8 +65,7 @@ def _entities_to_label_studio_result(
 ) -> list[dict[str, Any]]:
     results = []
     for ent in entities:
-        text_len = ent["end"] - ent["start"]
-        result_item = {
+        item: dict[str, Any] = {
             "from_name": from_name,
             "to_name": to_name,
             "type": LABEL_STUDIO_LABEL_TYPE,
@@ -79,18 +77,9 @@ def _entities_to_label_studio_result(
             },
             "score": ent.get("score", 1.0),
         }
-        
-        # Add metadata for confidence and reasoning
-        metadata = {}
-        if "reasoning" in ent:
-            metadata["reasoning"] = ent["reasoning"]
-        if "source" in ent:
-            metadata["source"] = ent["source"]
-        
-        if metadata:
-            result_item["meta"] = metadata
-            
-        results.append(result_item)
+        if "meta" in ent:
+            item["meta"] = ent["meta"]
+        results.append(item)
     return results
 
 
@@ -98,6 +87,7 @@ class CombinedNERBackend(LabelStudioMLBase):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         app_logger.info("Initializing CombinedNERBackend")
+        self.regex_processor = RegexNERProcessor()
         self.spacy_model = SpacyNERModel()
         self.webapi_client = WebAPIClient()
         self.llm_client = LLMClient()
@@ -120,6 +110,9 @@ class CombinedNERBackend(LabelStudioMLBase):
                 predictions.append({"result": [], "score": 0.0})
                 continue
 
+            regex_entities = self.regex_processor.predict(text)
+            predict_logger.debug("Regex found %d entities", len(regex_entities))
+
             spacy_entities = self.spacy_model.predict([text])[0]
             predict_logger.debug("spaCy found %d entities", len(spacy_entities))
 
@@ -139,7 +132,7 @@ class CombinedNERBackend(LabelStudioMLBase):
                 except Exception as exc:
                     predict_logger.error("LLM call failed: %s", exc)
 
-            merged = _merge_entities(spacy_entities, webapi_entities, llm_entities)
+            merged = _merge_entities(spacy_entities, webapi_entities, llm_entities, regex_entities)
             result = _entities_to_label_studio_result(merged, from_name, to_name)
 
             avg_score = (
