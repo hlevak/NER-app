@@ -7,6 +7,7 @@ from enum import Enum
 import httpx
 
 from .logger import get_llm_logger
+from .entity_config import ALLOWED_LABELS as _ALLOWED_LABELS, build_ner_system_prompt
 
 logger = get_llm_logger()
 
@@ -27,29 +28,7 @@ class LLMProvider(Enum):
     OPENAI_COMPATIBLE = "openai_compatible"
 
 
-NER_SYSTEM_PROMPT = """Ты - эксперт в распознавании именованных сущностей (NER).
-Твоя задача - найти и классифицировать сущности в тексте.
-
-Допустимые типы сущностей:
-- PER (Person) - имена людей
-- ORG (Organization) - организации, компании
-- LOC (Location) - географические локации, города, страны
-- DATE (Date) - даты, в том числе частичные (год, месяц и год)
-- ES (Электронный след) - контактные и цифровые идентификаторы: телефоны, email, аккаунты (@username) и названия групп/каналов в мессенджерах и соцсетях, сайты, IP-адреса, номера банковских карт и счетов, адреса криптокошельков. Если рядом с идентификатором есть название — включи оба в один span. Пример: {"label": "ES", "text": "Яндекс (www.ya.ru)"}. Используй ES когда идентификатор написан словами или косвенно упомянут.
-
-Ответь строго в формате JSON:
-{
-  "entities": [
-    {"label": "PER", "text": "Иван Иванов"},
-    {"label": "ORG", "text": "Яндекс"}
-  ]
-}
-
-Поле "text" должно содержать точную подстроку из исходного текста.
-Если сущностей нет, верни {"entities": []}.
-"""
-
-_ALLOWED_LABELS = {"PER", "ORG", "LOC", "DATE", "ES"}
+NER_SYSTEM_PROMPT = build_ner_system_prompt()
 
 NORMALIZE_SYSTEM_PROMPT = """Ты - эксперт по нормализации именованных сущностей.
 Твоя задача - привести сущность к канонической форме.

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NEREntity",
+  "type": "object",
+  "required": [
+    "start",
+    "end",
+    "label",
+    "text"
+  ],
+  "properties": {
+    "start": {
+      "type": "integer"
+    },
+    "end": {
+      "type": "integer"
+    },
+    "label": {
+      "type": "string",
+      "enum": [
+        "PER",
+        "ORG",
+        "LOC",
+        "DATE",
+        "ES"
+      ]
+    },
+    "text": {
+      "type": "string"
+    },
+    "score": {
+      "type": "number"
+    },
+    "source": {
+      "type": "string"
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "BIRTH_DATE": {
+          "type": "string"
+        },
+        "EMAIL": {
+          "type": "string"
+        },
+        "FIRST_NAME": {
+          "type": "string"
+        },
+        "LAST_NAME": {
+          "type": "string"
+        },
+        "PHONE": {
+          "type": "string"
+        },
+        "identifier": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

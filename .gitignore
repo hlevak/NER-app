@@ -35,8 +35,12 @@ logs/*.log
 logs/*.log.*
 !logs/.gitkeep
 
-# Label Studio data
-data/
+# Label Studio runtime data (uploads, media, etc.)
+data/*
+!data/input-schemas/
+!data/input-schemas/**
+!data/banks/
+!data/banks/**
 
 # Environment secrets
 # Keep the template files but not local overrides

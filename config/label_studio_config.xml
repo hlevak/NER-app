@@ -1,0 +1,10 @@
+<View>
+  <Labels name="label" toName="text">
+    <Label value="PER" background="#FFA39E"/>
+    <Label value="ORG" background="#D4380D"/>
+    <Label value="LOC" background="#FFC069"/>
+    <Label value="DATE" background="#95DE64"/>
+    <Label value="ES" background="#9254DE"/>
+  </Labels>
+  <Text name="text" value="$text"/>
+</View>

@@ -1,0 +1,4 @@
+field_name,data_type,description
+LAST_NAME,VARCHAR,Фамилия
+FIRST_NAME,VARCHAR,Имя
+BIRTH_DATE,DATE,Дата рождения
