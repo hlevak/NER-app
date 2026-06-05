@@ -22,14 +22,15 @@ NER-app представляет собой полноценную платфо�
 
 ### Поддерживаемые типы сущностей
 
-| Метка | Описание | Пример |
-|-------|----------|--------|
-| `PER` | Персоны | Иван Петров, Мария Сидорова |
-| `ORG` | Организации | Яндекс, Google, Сбербанк |
-| `LOC` | Локации | Москва, Россия, Эверест |
-| `DATE` | Даты | 1 января 2024, вчера |
-| `MONEY` | Денежные суммы | 1000 рублей, $50 |
-| `MISC` | Прочие сущности | UTF-8, iPhone 15 |
+| Метка | Русский код | Описание | Поля | Детектор |
+|-------|-------------|----------|------|----------|
+| `PER` | ЛЦ | Персоны | — | spaCy + LLM |
+| `ORG` | ЮЛ | Организации | — | spaCy + LLM |
+| `LOC` | АДР | Локации | — | spaCy + LLM |
+| `DATE` | ДТ | Даты | — | Regex + LLM |
+| `ES` | ЭС | Электронный след | `identifier`, `name` | Regex + LLM |
+
+Типы сущностей управляются через `config/entity_meta.json` и генерируются командой `python scripts/generate_input_schemas.py`.
 
 ---
 
@@ -161,19 +162,23 @@ NER-app представляет собой полноценную платфо�
 ### Слияние результатов (Merge Strategy)
 
 ```
-spaCy результаты:    [PER(0,5),    LOC(15,21), ORG(25,30)          ]
-WebAPI результаты:   [PER(0,6),                         DATE(35,42)]
-LLM результаты:      [PER(0,5),                                MONEY(50,60)]
+Regex результаты:    [DATE(35,42),                           ES(50,68)]
+LLM результаты:      [PER(0,5),              ORG(25,30)               ]
+WebAPI результаты:   [PER(0,6),                                        ]
+spaCy результаты:    [PER(0,5),   LOC(15,21), ORG(25,30)              ]
 
-Объединение (приоритет: LLM > WebAPI > spaCy):
-  1. Объединяем WebAPI + spaCy: [PER(0,6), LOC(15,21), ORG(25,30), DATE(35,42)]
-  2. Добавляем LLM (заменяем пересечения): [PER(0,5), LOC(15,21), ORG(25,30), DATE(35,42), MONEY(50,60)]
+Объединение (приоритет: Regex > LLM > WebAPI > spaCy):
+  1. WebAPI + spaCy: [PER(0,6), LOC(15,21), ORG(25,30)]
+  2. + LLM:          [PER(0,5), LOC(15,21), ORG(25,30)]
+  3. + Regex:        [PER(0,5), LOC(15,21), ORG(25,30), DATE(35,42), ES(50,68)]
 
-Итоговый результат:  [PER(0,5), LOC(15,21), ORG(25,30), DATE(35,42), MONEY(50,60)]
-                     ↑ LLM      ↑ spaCy      ↑ spaCy      ↑ WebAPI      ↑ LLM
+Итоговый результат:  [PER(0,5), LOC(15,21), ORG(25,30), DATE(35,42), ES(50,68)]
+                     ↑ LLM      ↑ spaCy      ↑ LLM        ↑ Regex      ↑ Regex
 ```
 
-> **Приоритет:** LLM → WebAPI → spaCy (наиболее гибкая модель имеет приоритет)
+> **Приоритет:** Regex → LLM → WebAPI → spaCy
+>
+> Regex-детектор имеет наивысший приоритет для DATE и ES: он детерминирован и не ошибается в структурированных идентификаторах (телефоны, email, IP, даты).
 
 ---
 
@@ -202,35 +207,17 @@ LLM результаты:      [PER(0,5),                                MONEY(5
 
 ### Предварительные требования
 
-1. ✅ Python 3.10 или 3.11 установлен
-2. ✅ PostgreSQL 15+ установлен (опционально для разработки - можно использовать SQLite)
-3. ✅ Создана база данных `label_studio` (для PostgreSQL)
+1. ✅ PostgreSQL 15+ установлен
+2. ✅ Python 3.10 или 3.11 установлен
+3. ✅ Создана база данных `label_studio`
 
-### Запуск (без Docker)
+### Запуск
 
-#### Linux/macOS:
-```bash
-cd /path/to/NER-app
-
-# Первоначальная настройка (один раз)
-./scripts/setup.sh
-./scripts/setup_database.sh  # для PostgreSQL
-
-# Запустить все сервисы
-./scripts/start_all.sh
-
-# Или отдельно:
-# ./scripts/start_ml_backend.sh
-# ./scripts/start_label_studio.sh
-```
-
-#### Windows:
 ```bat
 cd C:\NER-app
 
-:: Первоначальная настройка (один раз)
-scripts\setup.bat
-scripts\setup_database.bat
+:: Активировать виртуальное окружение
+venv\Scripts\activate
 
 :: Запустить все сервисы
 scripts\start_all.bat
@@ -248,7 +235,7 @@ scripts\start_all.bat
 1. Откройте http://localhost:8080
 2. Создайте аккаунт администратора
 3. Создайте проект **Named Entity Recognition**
-4. Настройте шаблон разметки:
+4. Настройте шаблон разметки (или возьмите из `config/label_studio_config.xml`):
    ```xml
    <View>
      <Labels name="label" toName="text">
@@ -256,15 +243,15 @@ scripts\start_all.bat
        <Label value="ORG" background="#D4380D"/>
        <Label value="LOC" background="#FFC069"/>
        <Label value="DATE" background="#95DE64"/>
-       <Label value="MISC" background="#5CDBD3"/>
+       <Label value="ES"   background="#9254DE"/>
      </Labels>
      <Text name="text" value="$text"/>
    </View>
    ```
+   > Актуальный XML всегда доступен в `config/label_studio_config.xml` после запуска `python scripts/generate_input_schemas.py`.
 5. Подключите ML Backend: **Settings → Machine Learning → Add Model**
    - URL: `http://localhost:9090`
    - Название: `spaCy NER Backend`
-   - Включите **Use for interactive pre-annotation** для интерактивного режима
 
 ---
 
@@ -272,16 +259,8 @@ scripts\start_all.bat
 
 ### Вариант A: Online установка (с интернетом)
 
-#### 1. Установка PostgreSQL (опционально для разработки)
+#### 1. Установка PostgreSQL
 
-**Linux (Ubuntu/Debian):**
-```bash
-sudo apt update
-sudo apt install postgresql postgresql-contrib
-sudo service postgresql start
-```
-
-**Windows:**
 ```bat
 :: Скачайте с https://www.postgresql.org/download/windows/
 :: Запустите установщик, запомните пароль пользователя postgres
@@ -289,48 +268,19 @@ sudo service postgresql start
 
 #### 2. Инициализация базы данных
 
-**Linux/macOS:**
-```bash
-cd /path/to/NER-app
-./scripts/setup_database.sh
-```
-
-**Windows:**
 ```bat
 cd C:\NER-app
 scripts\setup_database.bat
 ```
 
 > При запросе введите пароль пользователя `postgres`
-> Для разработки можно пропустить этот шаг и использовать SQLite.
 
 #### 3. Создание виртуального окружения
 
-**Linux/macOS:**
-```bash
-cd /path/to/NER-app
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-**Windows:**
 ```bat
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-Или используйте скрипт установки:
-
-**Linux/macOS:**
-```bash
-./scripts/setup.sh
-```
-
-**Windows:**
-```bat
-scripts\setup.bat
 ```
 
 #### 4. Настройка конфигурации
@@ -339,34 +289,24 @@ scripts\setup.bat
 
 **`config/label-studio.env`**
 ```env
-# Для PostgreSQL:
 POSTGRE_HOST=localhost
 POSTGRE_PORT=5432
 POSTGRE_PASSWORD=LabelStudio2024!
 LABEL_STUDIO_HOST=http://localhost:8080
-
-# Для SQLite (разработка):
-# POSTGRE_HOST=
 ```
 
 **`config/ml-backend.env`**
 ```env
 SPACY_MODEL=ru_core_news_sm
-MODELS_DIR=/path/to/NER-app/models
-LOGS_DIR=/path/to/NER-app/logs
+MODELS_DIR=C:\NER-app\models
+LOGS_DIR=C:\NER-app\logs
 ML_BACKEND_PORT=9090
 ```
 
-> ⚠️ **Обязательно смените пароли в production!**
+> ⚠️ **Обязательно смените пароли!**
 
 #### 5. Запуск сервисов
 
-**Linux/macOS:**
-```bash
-./scripts/start_all.sh
-```
-
-**Windows:**
 ```bat
 scripts\start_all.bat
 ```
@@ -473,77 +413,6 @@ SPACY_MODEL=ru_core_news_lg  # Точная
 
 ---
 
-## 🎯 Confidence и Reasoning
-
-ML Backend поддерживает вывод уверенности (confidence score) и объяснений (reasoning) для каждой распознанной сущности.
-
-### Формат ответа
-
-```json
-{
-  "result": [
-    {
-      "from_name": "label",
-      "to_name": "text",
-      "type": "labels",
-      "value": {
-        "start": 0,
-        "end": 11,
-        "text": "Иван Петров",
-        "labels": ["PER"]
-      },
-      "score": 0.95,
-      "meta": {
-        "source": "spacy",
-        "reasoning": "Имя человека: 'Иван Петров' - распознано как персоналия"
-      }
-    }
-  ]
-}
-```
-
-### Уровни уверенности (Confidence)
-
-| Источник | Диапазон | Описание |
-|----------|----------|----------|
-| **spaCy** | 0.85 - 0.99 | Базовая уверенность на основе характеристик сущности |
-| **WebAPI** | Зависит от API | Уверенность, предоставленная внешним API |
-| **LLM** | 0.0 - 1.0 | Уверенность, оцененная LLM моделью |
-
-### Объяснения (Reasoning)
-
-Каждая сущность сопровождается текстовым объяснением:
-- **spaCy**: Описание типа сущности на основе правил
-- **WebAPI**: Источник данных из внешнего API
-- **LLM**: Краткое объяснение от языковой модели
-
-### Режимы работы
-
-#### Pre-annotation (Предварительная разметка)
-
-Автоматическая разметка задач при их создании:
-1. Создайте проект в Label Studio
-2. Подключите ML Backend в Settings → Machine Learning
-3. Включите **Use for interactive pre-annotation**
-4. Загрузите задачи - они будут автоматически размечены
-
-#### Interactive Mode (Интерактивный режим)
-
-Реальные предсказания во время редактирования:
-1. Подключите ML Backend
-2. Включите **Use for interactive pre-annotation**
-3. При открытии задачи ML Backend предоставляет предсказания
-4. При редактировании текста можно запросить новые предсказания
-
-#### Training (Обучение)
-
-Дообучение модели на размеченных данных:
-1. В настройках ML Backend включите **Auto-update model**
-2. Label Studio будет автоматически вызывать `/fit` при накоплении аннотаций
-3. Или запустите обучение вручную через API
-
----
-
 ## 📈 Дообучение модели
 
 ### Экспорт данных из Label Studio
@@ -626,12 +495,13 @@ scripts\start_ml_backend.bat
 
 ### Рекомендации по разметке
 
-| Тип сущности | Минимум | Рекомендуется |
-|-------------|---------|---------------|
-| PER (персоны) | 50 | 200+ |
-| ORG (организации) | 50 | 200+ |
-| LOC (локации) | 50 | 200+ |
-| DATE (даты) | 30 | 100+ |
+| Тип сущности | Минимум | Рекомендуется | Примечание |
+|-------------|---------|---------------|-----------|
+| PER (персоны) | 50 | 200+ | |
+| ORG (организации) | 50 | 200+ | |
+| LOC (локации) | 50 | 200+ | |
+| DATE (даты) | 20 | 50+ | Regex покрывает большинство форм автоматически |
+| ES (электронный след) | 20 | 50+ | Regex покрывает структурированные форматы |
 
 ---
 
@@ -639,108 +509,78 @@ scripts\start_ml_backend.bat
 
 ```
 NER-app/
-├── .gitignore                  # Git игнорируемые файлы
-├── README.md                    # Этот файл
-├── requirements.txt             # Зависимости Python
-├── requirements-build.txt       # Зависимости сборки
+├── .gitignore                      # Git игнорируемые файлы
+├── README.md                       # Этот файл
+├── requirements.txt                # Зависимости Python
+├── requirements-build.txt          # Зависимости сборки
 │
-├── config/                      # Конфигурационные файлы
-│   ├── label-studio.env         # Настройки Label Studio + PostgreSQL
-│   ├── ml-backend.env           # Настройки ML Backend + WebAPI + LLM
-│   └── postgresql-init.sql      # SQL инициализация БД
+├── config/                         # Конфигурационные файлы
+│   ├── entity_meta.json            # [РУЧНОЙ] Метаданные типов сущностей (источник истины)
+│   ├── entities.json               # [ГЕНЕРИРУЕТСЯ] Полная NER-конфигурация
+│   ├── label_studio_config.xml     # [ГЕНЕРИРУЕТСЯ] XML для Label Studio UI
+│   ├── entity_schema.json          # [ГЕНЕРИРУЕТСЯ] JSON Schema для валидации
+│   ├── banks/                      # [ГЕНЕРИРУЕТСЯ] Индексы per-банк
+│   │   └── <БАНК>/vocab_index.json
+│   ├── label-studio.env            # Настройки Label Studio + PostgreSQL
+│   ├── ml-backend.env              # Настройки ML Backend + WebAPI
+│   └── postgresql-init.sql         # SQL инициализация БД
 │
-├── ml_backend/                  # ML Backend исходный код (Flask)
+├── data/                           # Входные данные
+│   ├── input-schemas/              # Оригиналы схем (read-only)
+│   │   └── <БАНК>/
+│   │       ├── <КОД>.csv           # Схема таблицы БД (КОД = рус. метка: ЛЦ, ЭС…)
+│   │       └── vocab/<КОД>.csv     # Словарные справочники
+│   └── banks/                      # Рабочие копии для генерации
+│       └── <БАНК>/
+│           ├── <КОД>.csv
+│           └── vocab/<КОД>.csv
+│
+├── ml_backend/                     # ML Backend исходный код
 │   ├── __init__.py
-│   ├── wsgi.py                  # Точка входа Flask приложения
-│   ├── combined_ner_backend.py  # LabelStudioMLBase наследник
-│   ├── spacy_ner_model.py       # spaCy NER обёртка с confidence/reasoning
-│   ├── model_trainer.py         # Логика обучения
-│   ├── webapi_client.py        # HTTP клиент WebAPI
-│   ├── llm_client.py           # LLM клиент (LM Studio / llama.cpp)
-│   ├── base_model.py           # Абстрактный базовый класс
-│   └── logger.py               # Настройка логирования
+│   ├── wsgi.py                     # Точка входа Flask приложения
+│   ├── entity_config.py            # Runtime-загрузчик entities.json
+│   ├── combined_ner_backend.py     # LabelStudioMLBase наследник (ансамбль)
+│   ├── regex_ner.py                # Regex-детектор DATE и ES сущностей
+│   ├── llm_client.py               # HTTP клиент LLM (LM Studio / llama.cpp)
+│   ├── spacy_ner_model.py          # spaCy NER обёртка
+│   ├── model_trainer.py            # Логика обучения
+│   ├── webapi_client.py            # HTTP клиент WebAPI
+│   ├── base_model.py               # Абстрактный базовый класс
+│   ├── logger.py                   # Настройка логирования
+│   └── requirements.txt            # Зависимости ML Backend
 │
-├── scripts/                     # Скрипты запуска
-│   ├── setup.sh                # Настройка окружения (Linux/macOS)
-│   ├── setup.bat               # Настройка окружения (Windows)
-│   ├── setup_database.sh       # Настройка PostgreSQL (Linux/macOS)
-│   ├── setup_database.bat      # Настройка PostgreSQL (Windows)
-│   ├── start_all.sh            # Запуск всех сервисов (Linux/macOS)
-│   ├── start_all.bat           # Запуск всех сервисов (Windows)
-│   ├── start_ml_backend.sh     # Запуск ML Backend (Linux/macOS)
-│   ├── start_ml_backend.bat    # Запуск ML Backend (Windows)
-│   ├── start_label_studio.sh   # Запуск Label Studio (Linux/macOS)
-│   ├── start_label_studio.bat  # Запуск Label Studio (Windows)
-│   ├── install_offline.bat     # Offline установка (Windows)
-│   ├── download_wheels.py      # Скачивание wheels
-│   └── download_wheels.bat     # Скачивание wheels (batch)
+├── scripts/                        # Скрипты
+│   ├── generate_input_schemas.py   # Генерация entities.json + XML из data/banks/
+│   ├── start_all.bat               # Запуск всех сервисов
+│   ├── start_ml_backend.bat        # Запуск ML Backend
+│   ├── start_label_studio.bat      # Запуск Label Studio
+│   ├── setup_database.bat          # Настройка PostgreSQL
+│   ├── install_offline.bat         # Offline установка
+│   ├── download_wheels.py          # Скачивание wheels
+│   └── download_wheels.bat         # Скачивание wheels (batch)
 │
-├── docs/                       # Документация
-│   ├── ARCHITECTURE.md         # Архитектура системы
-│   ├── INSTALLATION.md         # Инструкция по установке
-│   ├── OFFLINE_SETUP.md        # Offline установка
-│   ├── ML_BACKEND.md           # Описание ML Backend API
-│   ├── LLM_INTEGRATION.md      # Интеграция с LLM
-│   ├── MODEL_TRAINING.md       # Дообучение модели
-│   └── TROUBLESHOOTING.md      # Устранение проблем
+├── docs/                           # Документация
+│   ├── benchmark/                  # Результаты бенчмарков NER
+│   ├── ARCHITECTURE.md
+│   ├── INSTALLATION.md
+│   ├── OFFLINE_SETUP.md
+│   ├── ML_BACKEND.md
+│   ├── MODEL_TRAINING.md
+│   └── TROUBLESHOOTING.md
 │
-├── models/                     # Хранение моделей
-│   └── fine_tuned/             # Дообученные модели
-│       ├── model_final/        # Активная дообученная модель
-│       └── checkpoint_*/       # Чекпоинты обучения
+├── models/                         # Хранение моделей
+│   └── fine_tuned/
+│       ├── model_final/
+│       └── checkpoint_*/
 │
-├── logs/                       # Лог-файлы
-│   ├── app.log                 # Общие события
-│   ├── app_errors.log          # Ошибки приложения (ERROR+)
-│   ├── predict.log             # Predict операции
-│   ├── fit.log                 # Fit операции
-│   ├── webapi.log              # WebAPI вызовы
-│   ├── webapi_errors.log       # Ошибки WebAPI
-│   ├── llm.log                 # LLM вызовы
-│   ├── llm_errors.log          # Ошибки LLM
-│   └── training.log            # Процесс обучения
+├── logs/                           # Лог-файлы
+│   ├── app.log / app_errors.log
+│   ├── predict.log / fit.log
+│   ├── webapi.log / webapi_errors.log
+│   ├── llm.log / llm_errors.log
+│   └── training.log
 │
-└── wheels/                     # Wheel-пакеты для offline установки
-```
-
-## 🏗️ Архитектура без Docker
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                            Linux / Windows / macOS                      │
-│                                                                         │
-│   ┌────────────────┐              HTTP/REST              ┌───────────┐  │
-│   │ Label Studio   │◄───────────────────────────────────►│ ML Backend│  │
-│   │   :8080        │        (Flask + label-studio-ml)    │  :9090    │  │
-│   │                │                                   │            │  │
-│   │ • Разметка     │                                   │ ┌───────┐  │  │
-│   │ • Pre-ann      │                                   │ │spaCy  │  │  │
-│   │ • Interactive  │                                   │ │ + NER │  │  │
-│   └───────┬────────┘                                   │ └───┬───┘  │  │
-│           │                                             │     │     │  │
-│           │ SQLAlchemy                                  │ ┌───▼───┐  │  │
-│   ┌───────▼────────┐                                   │ │WebAPI │  │  │
-│   │   PostgreSQL   │                                   │ │Client │  │  │
-│   │    :5432       │                                   │ └───────┘  │  │
-│   │   (опционально)│                                   │            │  │
-│   │                │                                   │ ┌───────┐  │  │
-│   │ label_studio   │                                   │ │ LLM   │  │  │
-│   │   database     │                                   │ │Client │  │  │
-│   └────────────────┘                                   │ └───┬───┘  │  │
-│                                                         └─────┼──────┘  │
-│                                                               │         │
-│                                                     (опционально)       │
-│                                                               │         │
-│                                                   ┌───────────▼────┐    │
-│                                                   │  LM Studio /   │    │
-│                                                   │  llama.cpp     │    │
-│                                                   │  :1234         │    │
-│                                                   └────────────────┘    │
-│   ┌──────────────────────────────────────────────────────────────┐    │
-│   │                    Файловая система                          │    │
-│   │   models/fine_tuned/   logs/   data/   config/               │    │
-│   └──────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────┘
+└── wheels/                         # Wheel-пакеты для offline установки
 ```
 
 ---
@@ -989,12 +829,40 @@ python -c "import spacy; nlp = spacy.load('ru_core_news_sm'); print([(e.text, e.
 
 #### Добавление нового типа сущности
 
-1. Добавьте метку в шаблон Label Studio:
-   ```xml
-   <Label value="NEW_ENTITY" background="#FF0000"/>
+1. Добавьте запись в `config/entity_meta.json`:
+   ```json
+   "НС": {
+     "label": "EVT",
+     "name_ru": "Событие",
+     "prompt_ru": "события, мероприятия, конференции",
+     "color": "#1890FF",
+     "regex_group": null,
+     "fields": []
+   }
    ```
 
-2. Обновите дообученную модель с новыми примерами
+2. Добавьте схему в `data/banks/<БАНК>/НС.csv` (при необходимости).
+
+3. Перегенерируйте конфиги:
+   ```bat
+   python scripts\generate_input_schemas.py
+   ```
+   Команда обновит `entities.json`, `label_studio_config.xml`, JSON Schema.
+
+4. Вставьте обновлённый XML из `config/label_studio_config.xml` в Label Studio UI.
+
+5. Перезапустите ML Backend — LLM-промпт и фильтр меток обновятся автоматически.
+
+#### Добавление нового банка
+
+```bat
+:: 1. Скопировать нужные схемы из оригиналов
+xcopy data\input-schemas\VTB\*.csv data\banks\VTB\
+xcopy data\input-schemas\VTB\vocab data\banks\VTB\vocab\ /E
+
+:: 2. Перегенерировать
+python scripts\generate_input_schemas.py
+```
 
 #### Интеграция нового WebAPI
 
