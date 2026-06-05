@@ -2,8 +2,16 @@ import re
 from typing import Any
 
 from .logger import get_predict_logger
+from .entity_config import ENTITIES as _ENTITY_DEFS
 
 logger = get_predict_logger()
+
+_DATE_LABEL: str = next(
+    (e["label"] for e in _ENTITY_DEFS if e.get("regex_group") == "date"), "DATE"
+)
+_ES_LABEL: str = next(
+    (e["label"] for e in _ENTITY_DEFS if e.get("regex_group") == "es"), "ES"
+)
 
 # ---------------------------------------------------------------------------
 # DATE patterns
@@ -167,7 +175,7 @@ class RegexNERProcessor:
 
         for pat in _DATE_PATTERNS:
             for m in pat.finditer(text):
-                candidates.append((m.start(), m.end(), "DATE", m.group(0), {}, priority))
+                candidates.append((m.start(), m.end(), _DATE_LABEL, m.group(0), {}, priority))
             priority += 1
 
         for pat, has_named in _ES_PATTERNS:
@@ -182,7 +190,7 @@ class RegexNERProcessor:
                         meta["identifier"] = identifier
                 else:
                     meta = {"identifier": m.group(0)}
-                candidates.append((m.start(), m.end(), "ES", m.group(0), meta, priority))
+                candidates.append((m.start(), m.end(), _ES_LABEL, m.group(0), meta, priority))
             priority += 1
 
         entities = _resolve_overlaps(candidates)

@@ -1,0 +1,112 @@
+{
+  "_generated_from": "data/banks/",
+  "_note": "auto-generated — safe to edit manually for prompt tuning; regenerating will overwrite",
+  "entities": [
+    {
+      "label": "PER",
+      "code_ru": "ЛЦ",
+      "name_ru": "Лицо (персона)",
+      "prompt_ru": "имена людей",
+      "color": "#FFA39E",
+      "regex_group": null,
+      "fields": [
+        {
+          "name": "LAST_NAME",
+          "data_type": "VARCHAR",
+          "description": "Фамилия"
+        },
+        {
+          "name": "FIRST_NAME",
+          "data_type": "VARCHAR",
+          "description": "Имя"
+        },
+        {
+          "name": "BIRTH_DATE",
+          "data_type": "DATE",
+          "description": "Дата рождения"
+        }
+      ],
+      "banks": {
+        "TEST": {
+          "fields": [
+            "LAST_NAME",
+            "FIRST_NAME",
+            "BIRTH_DATE"
+          ],
+          "vocab": "data\\banks\\TEST\\vocab\\ЛЦ.csv",
+          "vocab_count": 2
+        }
+      }
+    },
+    {
+      "label": "ORG",
+      "code_ru": "ЮЛ",
+      "name_ru": "Юридическое лицо",
+      "prompt_ru": "организации, компании",
+      "color": "#D4380D",
+      "regex_group": null,
+      "fields": [],
+      "banks": {}
+    },
+    {
+      "label": "LOC",
+      "code_ru": "АДР",
+      "name_ru": "Адрес / локация",
+      "prompt_ru": "географические локации, города, страны",
+      "color": "#FFC069",
+      "regex_group": null,
+      "fields": [],
+      "banks": {}
+    },
+    {
+      "label": "DATE",
+      "code_ru": "ДТ",
+      "name_ru": "Дата",
+      "prompt_ru": "даты, в том числе частичные (год, месяц и год)",
+      "color": "#95DE64",
+      "regex_group": "date",
+      "fields": [],
+      "banks": {}
+    },
+    {
+      "label": "ES",
+      "code_ru": "ЭС",
+      "name_ru": "Электронный след",
+      "prompt_ru": "контактные и цифровые идентификаторы: телефоны, email, аккаунты (@username) и названия групп/каналов в мессенджерах и соцсетях, сайты, IP-адреса, номера банковских карт и счетов, адреса криптокошельков. Если рядом с идентификатором есть название — включи оба в один span. Пример: {\"label\": \"ES\", \"text\": \"Яндекс (www.ya.ru)\"}. Используй ES когда идентификатор написан словами или косвенно упомянут.",
+      "color": "#9254DE",
+      "regex_group": "es",
+      "fields": [
+        {
+          "name": "identifier",
+          "data_type": null,
+          "description": "уникальный технический идентификатор (номер, адрес, ID)"
+        },
+        {
+          "name": "name",
+          "data_type": null,
+          "description": "человекочитаемое название (сайта, канала, группы)"
+        },
+        {
+          "name": "PHONE",
+          "data_type": "VARCHAR",
+          "description": "Телефон"
+        },
+        {
+          "name": "EMAIL",
+          "data_type": "VARCHAR",
+          "description": "Email"
+        }
+      ],
+      "banks": {
+        "TEST": {
+          "fields": [
+            "PHONE",
+            "EMAIL"
+          ],
+          "vocab": null,
+          "vocab_count": 0
+        }
+      }
+    }
+  ]
+}

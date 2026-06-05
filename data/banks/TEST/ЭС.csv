@@ -1,0 +1,3 @@
+field_name,data_type,description
+PHONE,VARCHAR,Телефон
+EMAIL,VARCHAR,Email
