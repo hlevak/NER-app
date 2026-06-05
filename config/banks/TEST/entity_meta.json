@@ -1,0 +1,16 @@
+{
+  "ЛЦ": {
+    "label": "PER",
+    "name_ru": "Имя",
+    "prompt_ru": "Имя человека",
+    "color": "#FFA39E",
+    "regex_group": "first_name"
+  },
+  "ЭС": {
+    "label": "ES",
+    "name_ru": "Телефон",
+    "prompt_ru": "Электронный идентификатор",
+    "color": "#9254DE",
+    "regex_group": "es"
+  }
+}

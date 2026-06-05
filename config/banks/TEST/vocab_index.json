@@ -1,7 +1,12 @@
 {
   "PER": {
     "code_ru": "ЛЦ",
-    "path": "data\\banks\\TEST\\vocab\\ЛЦ.csv",
-    "count": 2
+    "fields": [
+      "LAST_NAME",
+      "FIRST_NAME",
+      "BIRTH_DATE"
+    ],
+    "vocab": "data\\banks\\TEST\\vocab\\ЛЦ.csv",
+    "vocab_count": 2
   }
 }

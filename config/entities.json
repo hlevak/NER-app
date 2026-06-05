@@ -1,14 +1,14 @@
 {
   "_generated_from": "data/banks/",
-  "_note": "auto-generated — safe to edit manually for prompt tuning; regenerating will overwrite",
+  "_note": "auto-generated from CSV + LLM metadata; safe to edit prompt_ru manually",
   "entities": [
     {
       "label": "PER",
       "code_ru": "ЛЦ",
-      "name_ru": "Лицо (персона)",
-      "prompt_ru": "имена людей",
+      "name_ru": "Имя",
+      "prompt_ru": "Имя человека",
       "color": "#FFA39E",
-      "regex_group": null,
+      "regex_group": "first_name",
       "fields": [
         {
           "name": "LAST_NAME",
@@ -39,53 +39,13 @@
       }
     },
     {
-      "label": "ORG",
-      "code_ru": "ЮЛ",
-      "name_ru": "Юридическое лицо",
-      "prompt_ru": "организации, компании",
-      "color": "#D4380D",
-      "regex_group": null,
-      "fields": [],
-      "banks": {}
-    },
-    {
-      "label": "LOC",
-      "code_ru": "АДР",
-      "name_ru": "Адрес / локация",
-      "prompt_ru": "географические локации, города, страны",
-      "color": "#FFC069",
-      "regex_group": null,
-      "fields": [],
-      "banks": {}
-    },
-    {
-      "label": "DATE",
-      "code_ru": "ДТ",
-      "name_ru": "Дата",
-      "prompt_ru": "даты, в том числе частичные (год, месяц и год)",
-      "color": "#95DE64",
-      "regex_group": "date",
-      "fields": [],
-      "banks": {}
-    },
-    {
       "label": "ES",
       "code_ru": "ЭС",
-      "name_ru": "Электронный след",
-      "prompt_ru": "контактные и цифровые идентификаторы: телефоны, email, аккаунты (@username) и названия групп/каналов в мессенджерах и соцсетях, сайты, IP-адреса, номера банковских карт и счетов, адреса криптокошельков. Если рядом с идентификатором есть название — включи оба в один span. Пример: {\"label\": \"ES\", \"text\": \"Яндекс (www.ya.ru)\"}. Используй ES когда идентификатор написан словами или косвенно упомянут.",
+      "name_ru": "Телефон",
+      "prompt_ru": "Электронный идентификатор",
       "color": "#9254DE",
       "regex_group": "es",
       "fields": [
-        {
-          "name": "identifier",
-          "data_type": null,
-          "description": "уникальный технический идентификатор (номер, адрес, ID)"
-        },
-        {
-          "name": "name",
-          "data_type": null,
-          "description": "человекочитаемое название (сайта, канала, группы)"
-        },
         {
           "name": "PHONE",
           "data_type": "VARCHAR",

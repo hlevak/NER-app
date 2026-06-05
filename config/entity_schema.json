@@ -19,9 +19,6 @@
       "type": "string",
       "enum": [
         "PER",
-        "ORG",
-        "LOC",
-        "DATE",
         "ES"
       ]
     },
@@ -50,12 +47,6 @@
           "type": "string"
         },
         "PHONE": {
-          "type": "string"
-        },
-        "identifier": {
-          "type": "string"
-        },
-        "name": {
           "type": "string"
         }
       },
